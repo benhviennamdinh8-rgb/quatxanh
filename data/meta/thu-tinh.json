@@ -1,0 +1,43 @@
+{
+  "slug": "thu-tinh",
+  "title": "THƯ TÌNH",
+  "cover": "/covers/thu-tinh.jpg",
+  "author": "Đang cập nhật",
+  "views": 7930,
+  "status": "ongoing",
+  "sourceUrl": "https://kiwiiudammy.com/thu-tinh.html",
+  "rating": null,
+  "genres": [
+    "BE",
+    "Hiện đại",
+    "Ngôn tình",
+    "SE"
+  ],
+  "desc": "Năm vừa nghèo vừa khổ ấy, ngày nào tôi cũng lén lấy những món quà mà các bạn nữ trong trường tặng cho Chu Kỳ Niên.\nTrong số đó có một tấm ảnh chụp chung cả lớp được đóng gói kỹ lưỡng trong hộp, tôi vẫn luôn chưa từng mở ra.\nTám năm sau.\nTrong lúc tranh cãi với bạn trai, tôi vô tình làm đổ chiếc hộp đó. Tôi thấy một bức thư tình rơi ra từ bên trong:\n\"Chẳng có ai tặng quà mỗi ngày mà không để lại danh tính cả, ngoại trừ cái kẻ thầm thương trộm nhớ ngốc nghếch kia.\"\n\"Bạn học Tống Chi, cậu có muốn thử ngoảnh đầu lại nhìn cậu ấy một lần không?\"",
+  "chapters": [
+    {
+      "number": 1,
+      "name": "Chương 1",
+      "url": "/chuong/thu-tinh/1"
+    },
+    {
+      "number": 2,
+      "name": "Chương 2",
+      "url": "/chuong/thu-tinh/2"
+    },
+    {
+      "number": 3,
+      "name": "Chương 3",
+      "url": "/chuong/thu-tinh/3"
+    },
+    {
+      "number": 4,
+      "name": "Chương 4",
+      "url": "/chuong/thu-tinh/4"
+    }
+  ],
+  "chapterCount": 4,
+  "published": "Đăng lúc 11:47 - 11/01/2026",
+  "lastUpdated": 1789133858348,
+  "fetched": true
+}

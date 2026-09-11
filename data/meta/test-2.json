@@ -1,0 +1,36 @@
+{
+  "slug": "test-2",
+  "title": "Test 2",
+  "cover": "/covers/test-2.jpg",
+  "author": "Đang cập nhật",
+  "views": 329,
+  "status": "ongoing",
+  "sourceUrl": "https://kiwiiudammy.com/test-2.html",
+  "rating": null,
+  "genres": [
+    "Ngôn tình",
+    "Tiểu tam"
+  ],
+  "desc": "giới thiệu",
+  "chapters": [
+    {
+      "number": 1,
+      "name": "Chương 1: Dfsdfdf",
+      "url": "/chuong/test-2/1"
+    },
+    {
+      "number": 2,
+      "name": "Chương 2: Test 120326",
+      "url": "/chuong/test-2/2"
+    },
+    {
+      "number": 3,
+      "name": "Chương 3: Test Mới",
+      "url": "/chuong/test-2/3"
+    }
+  ],
+  "chapterCount": 3,
+  "published": "Đăng lúc 14:31 - 11/03/2026",
+  "lastUpdated": 1789133750211,
+  "fetched": true
+}
