@@ -103,7 +103,7 @@ def load_meta(slug):
 
 
 def rebuild_index():
-    global INDEX, lastSync
+    global INDEX, lastSync, _home_cache
     idx = {}
     if os.path.isdir(META_DIR):
         for fn in os.listdir(META_DIR):
@@ -114,6 +114,7 @@ def rebuild_index():
                     idx[slug] = m
     INDEX = idx
     lastSync = int(time.time() * 1000)
+    _home_cache = None
 
 
 def chapter_slugs():
@@ -166,14 +167,23 @@ def summary(meta):
     return s
 
 
+_home_cache = None
+_chap_cache = {}
+_chap_cache_order = []
+CHAP_CACHE_MAX = 4000
+
+
 def home_payload():
-    items = list(INDEX.values())
-    popular = sorted(items, key=lambda m: m.get("views") or 0, reverse=True)[:12]
-    recent = sorted(items, key=lambda m: m.get("lastUpdated") or 0, reverse=True)[:12]
-    return {
-        "popular": [summary(m) for m in popular],
-        "recentlyUpdated": [summary(m) for m in recent],
-    }
+    global _home_cache
+    if _home_cache is None:
+        items = list(INDEX.values())
+        popular = sorted(items, key=lambda m: m.get("views") or 0, reverse=True)[:12]
+        recent = sorted(items, key=lambda m: m.get("lastUpdated") or 0, reverse=True)[:12]
+        _home_cache = {
+            "popular": [summary(m) for m in popular],
+            "recentlyUpdated": [summary(m) for m in recent],
+        }
+    return _home_cache
 
 
 def novels_payload(qs):
@@ -248,6 +258,10 @@ def chapter_payload(url):
     if not m:
         return {"error": "url khong hop le"}
     slug, num = m.group(1), int(m.group(2))
+    key = "%s_%d" % (slug, num)
+    cached = _chap_cache.get(key)
+    if cached is not None:
+        return cached
     content = ""
     p = os.path.join(CHAP_DIR, "%s_%d.txt" % (slug, num))
     if os.path.exists(p):
@@ -263,7 +277,14 @@ def chapter_payload(url):
             if c.get("number") == num:
                 title = c.get("name") or title
                 break
-    return {"content": content, "title": title, "slug": slug, "number": num}
+    payload = {"content": content, "title": title, "slug": slug, "number": num}
+    if content:
+        _chap_cache[key] = payload
+        _chap_cache_order.append(key)
+        if len(_chap_cache_order) > CHAP_CACHE_MAX:
+            old = _chap_cache_order.pop(0)
+            _chap_cache.pop(old, None)
+    return payload
 
 
 def status_payload():
@@ -379,6 +400,7 @@ def log(msg):
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "TEHI/1.0"
+    protocol_version = "HTTP/1.1"
 
     # ---- helpers ----
 
@@ -448,7 +470,8 @@ class Handler(BaseHTTPRequestHandler):
         self._cors()
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "keep-alive")
+        self.send_header("Connection", "close")
+        self.end_headers()
         self.end_headers()
         while True:
             try:
