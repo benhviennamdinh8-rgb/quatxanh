@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#e44d26">
+    <title>Đọc Truyện</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="light">
+
+    <header id="topbar" class="topbar">
+        <div class="topbar-inner">
+            <button class="icon-btn" id="navHome" onclick="nav('/')" aria-label="Trang chủ"><i class="bi bi-house"></i></button>
+            <div class="brand" onclick="nav('/')"><span class="brand-mark">TO</span><span class="brand-text">Truyện Online</span></div>
+            <div class="topbar-actions">
+                <button class="icon-btn" id="navThemeBtn" onclick="cycleTheme()" aria-label="Đổi theme"><i class="bi bi-moon-stars"></i></button>
+                <button class="icon-btn" id="navSettings" onclick="nav('/settings')" aria-label="Cài đặt"><i class="bi bi-gear"></i></button>
+            </div>
+        </div>
+    </header>
+
+    <nav id="bottomnav" class="bottomnav" aria-label="Điều hướng">
+        <button class="bn-item" data-route="/" onclick="nav('/')"><i class="bi bi-house"></i><span>Trang chủ</span></button>
+        <button class="bn-item" data-route="/search" onclick="nav('/search')"><i class="bi bi-search"></i><span>Tìm kiếm</span></button>
+        <button class="bn-item" data-route="/library" onclick="nav('/library')"><i class="bi bi-bookmark"></i><span>Thư viện</span></button>
+        <button class="bn-item" data-route="/history" onclick="nav('/history')"><i class="bi bi-clock-history"></i><span>Lịch sử</span></button>
+        <button class="bn-item" data-route="/settings" onclick="nav('/settings')"><i class="bi bi-gear"></i><span>Cài đặt</span></button>
+    </nav>
+
+    <main id="app" class="app" aria-live="polite"></main>
+
+    <div id="toastHost" class="toast-host"></div>
+
+    <div id="readerOverlay" class="reader hidden">
+        <div id="readerTop" class="reader-top">
+            <button class="icon-btn" id="readerClose" onclick="exitReader()" aria-label="Đóng"><i class="bi bi-x-lg"></i></button>
+            <div class="reader-title" id="readerTitle"></div>
+            <button class="icon-btn" onclick="toggleReaderMenu()" aria-label="Menu"><i class="bi bi-list"></i></button>
+        </div>
+        <div id="readerSkeleton" class="reader-skeleton hidden"></div>
+        <div id="readerContent" class="reader-content"></div>
+        <div class="reader-progressbar"><div id="readerProgressFill"></div></div>
+        <div class="reader-nav">
+            <button id="readerPrev" onclick="readerNav(-1)" aria-label="Chương trước"><i class="bi bi-chevron-left"></i><span class="rn-label">Trước</span></button>
+            <button id="readerToc" onclick="toggleToc()" aria-label="Mục lục"><i class="bi bi-list-ul"></i><span class="rn-label">Mục lục</span></button>
+            <button id="readerNext" onclick="readerNav(1)" aria-label="Chương sau"><i class="bi bi-chevron-right"></i><span class="rn-label">Sau</span></button>
+        </div>
+
+        <div id="readerMenu" class="reader-menu hidden"></div>
+        <div id="readerTocPanel" class="reader-toc hidden"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

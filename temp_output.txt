@@ -1,0 +1,90 @@
+=== MATCH 1 at position 11240 ===
+
+        // Tính toán lại vị trí sau khi hover
+        setTimeout(resizeTruyenHoanThanh, 0);
+    }).on('mouseleave', '.hydrosite-mong-truyen-book-card, .hydrosite-mong-truyen-small-book', function() {
+        const $element = $(this);
+        const $parents = $element.parents('.col, .col-lg-2, .col-md-3, .col-sm-4, .col-6, .swiper-slide, .hydrosite-mong-truyen-small-book-wrapper');
+        
+        // Reset z-index và position cho tất cả phần tử
+        $parents.css({
+            'position': '',
+            'z-index': ''
+        });
+        
+        $element.css({
+            'position': '',
+            'z-index': ''
+        });
+    });
+
+    // Gọi hàm tính toán lại khi nội dung AJAX được load
+    $(document).ajaxComplete(function(event, xhr, settings) {
+        if (settings.url.includes('mong-truyen-truyen-danh-muc.php')) {
+            setTimeout(resizeTruyenHoanThanh, 100); // Đợi DOM cập nhật hoàn tất
+        }
+    });
+
+    // Tính toán lại khi resize window
+    let resizeTimeout;
+    $(window).on('resize', function() {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(resizeTruyenHoanThanh, 100);
+    });
+
+    // Tính toán lần đầu khi trang load
+    $(document).ready(function() {
+        setTimeout(resizeTruyenHoanThanh, 100);
+    });
+
+    // Hàm khởi tạo Lenis 
+    function initLenis() {
+        lenis = new Lenis({
+            duration: toc_do, // Thời gian cuộn mượt
+            easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), // Easing mượt mà
+            smoothWheel: true, // Kích hoạt cuộn mượt với chuột
+            smoothTouch: false, 
+
+=== MATCH 2 at position 69197 ===
+recently-read px-3  pb-3  pt-2">
+                        <h3 class="hydrosite-mong-truyen-categories-title  mb-2 mb-lg-3 d-flex w-100 align-items-center gap-2 justify-content-between">TRUYỆN VỪA ĐỌC <i class="ms-auto fa-solid fa-bookmark"></i></h3>
+                        <div class="hydrosite-mong-truyen-recently-read-content">
+                            <div class="row row-cols-1 gy-2 text-white" id="result-truyen-vua-doc">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<script>
+    $(document).ready(function() {
+        const limit = 12;
+        const chuyenmuc = '268';
+
+        function loadPage(page) {
+            $.ajax({
+                url: "sources/ajax/mong-truyen-truyen-danh-muc.php",
+                type: "POST",
+                dataType: "json",
+                data: {
+                    page: page,
+                    limit: limit,
+                    chuyenmuc: chuyenmuc
+                },
+                success: function(response) {
+                    $('#result-truyen-danh-muc').html(response.html);
+                    renderPagination(response.total_page, page);
+                    // Gọi hàm tính toán lại kích thước sau khi nội dung được thêm vào
+                    setTimeout(function() {
+                        resizeTruyenHoanThanh();
+                    }, 100);
+                }
+            });
+        }
+
+        function renderPagination(totalPages, currentPage) {
+            let paginationHTML = '';
+            const m
+
