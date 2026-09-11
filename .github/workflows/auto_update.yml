@@ -33,6 +33,14 @@ jobs:
         run: |
           python scraper.py
 
+- name: Auto Fix Local API to Static JSON
+  run: |
+    # Tự động thay thế 127.0.0.1:8000 hoặc localhost:8000 thành ./data/ trong các file JS
+    sed -i 's|http://127.0.0.1:8000/api/|./data/|g' *.js
+    sed -i 's|http://localhost:8000/api/|./data/|g' *.js
+    sed -i 's|http://127.0.0.1:8000/|./data/|g' *.js
+    sed -i 's|http://localhost:8000/|./data/|g' *.js
+
       # 5. Tự động lưu và push file JSON mới lên GitHub
       - name: Commit and push changes
         run: |
