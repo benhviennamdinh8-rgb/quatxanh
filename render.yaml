@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: do-truyen
+    runtime: python
+    plan: free
+    buildCommand: ""
+    startCommand: python server.py
+    healthCheckPath: /api/home
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ALLOW_ORIGIN
+        value: "*"

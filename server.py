@@ -86,7 +86,7 @@ def load_config():
             CONFIG = json.load(f)
     except Exception:
         CONFIG = {}
-    CONFIG.setdefault("password", DEFAULT_PASSWORD)
+    CONFIG.setdefault("password", os.environ.get("ADMIN_PASSWORD", DEFAULT_PASSWORD))
     b = CONFIG.setdefault("banner", {})
     b.setdefault("image", DEFAULT_BANNER)
     b.setdefault("link", "https://s.shopee.vn/")
@@ -382,12 +382,23 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- helpers ----
 
+    def _cors(self):
+        origin = os.environ.get("ALLOW_ORIGIN", "").strip()
+        if not origin:
+            origin = "*"
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, x-admin-token")
+
     def _json(self, obj, status=200):
         data = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
+        self._cors()
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-cache")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
         self.end_headers()
         try:
             self.wfile.write(data)
@@ -402,9 +413,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         self.send_response(200)
+        self._cors()
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-cache")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
         self.end_headers()
         try:
             self.wfile.write(data)
@@ -431,6 +445,7 @@ class Handler(BaseHTTPRequestHandler):
 
         threading.Thread(target=runner, daemon=True).start()
         self.send_response(200)
+        self._cors()
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Connection", "keep-alive")
@@ -463,6 +478,12 @@ class Handler(BaseHTTPRequestHandler):
             self.api_get(path, parsed)
             return
         self.serve_static(path)
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors()
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length") or 0)
@@ -627,8 +648,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     ap = argparse.ArgumentParser(description="Do Truyen local server")
-    ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=8000)
+    ap.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
+    ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
     args = ap.parse_args()
 
     ensure_dirs_and_assets()

@@ -28,24 +28,29 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      # 4. Chạy script cào truyện để xuất dữ liệu mới vào thư mục data
-      - name: Run scraper script
-        run: |
-          python scraper.py
-
-- name: Auto Fix Local API to Static JSON
+    	# 4. Chạy script cào truyện
+- name: Run scraper script
   run: |
-    # Tự động thay thế 127.0.0.1:8000 hoặc localhost:8000 thành ./data/ trong các file JS
-    sed -i 's|http://127.0.0.1:8000/api/|./data/|g' *.js
-    sed -i 's|http://localhost:8000/api/|./data/|g' *.js
-    sed -i 's|http://127.0.0.1:8000/|./data/|g' *.js
-    sed -i 's|http://localhost:8000/|./data/|g' *.js
+    python scraper.py
 
-      # 5. Tự động lưu và push file JSON mới lên GitHub
-      - name: Commit and push changes
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/ config.json
-          git commit -m "Auto update content from GitHub Actions" || exit 0
-          git push
+# 4.5. Tự động chuyển đổi các đường dẫn API local (An toàn nếu không có file JS)
+- name: Auto fix local API to static JSON
+  run: |
+    shopt -s nullglob
+    for f in *.js js/*.js; do
+      if [ -f "$f" ]; then
+        sed -i 's|http://127.0.0.1:8000/api/|./data/|g' "$f"
+        sed -i 's|http://localhost:8000/api/|./data/|g' "$f"
+        sed -i 's|http://127.0.0.1:8000/|./data/|g' "$f"
+        sed -i 's|http://localhost:8000/|./data/|g' "$f"
+      fi
+    done
+
+# 5. Tự động lưu và push file mới lên GitHub
+- name: Commit and push changes
+  run: |
+    git config --global user.name "github-actions[bot]"
+    git config --global user.email "github-actions[bot]@users.noreply.github.com"
+    git add .
+    git commit -m "Auto update content and static URLs from GitHub Actions" || exit 0
+    git push
