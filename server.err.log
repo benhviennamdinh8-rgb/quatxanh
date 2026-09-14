@@ -1,0 +1,94 @@
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 62690)
+Traceback (most recent call last):
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\socketserver.py", line 683, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\socketserver.py", line 360, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "D:\WEB\server.py", line 159, in __init__
+    super().__init__(*args, directory=ROOT, **kwargs)
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\http\server.py", line 653, in __init__
+    super().__init__(*args, **kwargs)
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\socketserver.py", line 747, in __init__
+    self.handle()
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\http\server.py", line 427, in handle
+    self.handle_one_request()
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\http\server.py", line 415, in handle_one_request
+    method()
+  File "D:\WEB\server.py", line 239, in do_POST
+    self._send_json({'ok': True})
+  File "D:\WEB\server.py", line 171, in _send_json
+    self.wfile.write(body)
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\socketserver.py", line 826, in write
+    self._sock.sendall(b)
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+----------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('192.168.1.7', 56094)
+Traceback (most recent call last):
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\socketserver.py", line 683, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\socketserver.py", line 360, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "D:\WEB\server.py", line 159, in __init__
+    super().__init__(*args, directory=ROOT, **kwargs)
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\http\server.py", line 653, in __init__
+    super().__init__(*args, **kwargs)
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\socketserver.py", line 747, in __init__
+    self.handle()
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\http\server.py", line 427, in handle
+    self.handle_one_request()
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\http\server.py", line 415, in handle_one_request
+    method()
+  File "D:\WEB\server.py", line 227, in do_GET
+    super().do_GET()
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\http\server.py", line 660, in do_GET
+    self.copyfile(f, self.wfile)
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\http\server.py", line 860, in copyfile
+    shutil.copyfileobj(source, outputfile)
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\shutil.py", line 198, in copyfileobj
+    fdst_write(buf)
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\socketserver.py", line 826, in write
+    self._sock.sendall(b)
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+----------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('192.168.1.254', 64054)
+Traceback (most recent call last):
+  File "D:\WEB\server.py", line 233, in do_POST
+    raw = self.rfile.read(length).decode('utf-8')
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\socket.py", line 705, in readinto
+    return self._sock.recv_into(b)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\socketserver.py", line 683, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\socketserver.py", line 360, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "D:\WEB\server.py", line 159, in __init__
+    super().__init__(*args, directory=ROOT, **kwargs)
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\http\server.py", line 653, in __init__
+    super().__init__(*args, **kwargs)
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\socketserver.py", line 747, in __init__
+    self.handle()
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\http\server.py", line 427, in handle
+    self.handle_one_request()
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\http\server.py", line 415, in handle_one_request
+    method()
+  File "D:\WEB\server.py", line 237, in do_POST
+    self.send_error(400, 'bad json')
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\http\server.py", line 479, in send_error
+    self.end_headers()
+  File "D:\WEB\server.py", line 163, in end_headers
+    super().end_headers()
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\http\server.py", line 529, in end_headers
+    self.flush_headers()
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\http\server.py", line 533, in flush_headers
+    self.wfile.write(b"".join(self._headers_buffer))
+  File "C:\Users\TBT\AppData\Local\Programs\Python\Python310\lib\socketserver.py", line 826, in write
+    self._sock.sendall(b)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------

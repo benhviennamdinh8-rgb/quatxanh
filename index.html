@@ -1,58 +1,915 @@
 <!DOCTYPE html>
+<!-- [Nhiệm vụ: File chạy app C2 Chill Chill Online — ghép mô-đun config/components/modules/services thành giao diện đọc truyện: Trang chủ (tìm nhanh, Phổ biến, Mới cập nhật 30 dòng, Đề xuất 5 truyện theo thể loại ngách), Chi tiết truyện, Tìm kiếm nâng cao, Thư viện 4 tab, Lịch sử, Cài đặt, Khung đọc + popup quảng cáo + mục lục; dùng StoryStore làm nguồn chung với admin] -->
+<!-- [Đường dẫn: /index.html (gốc dự án)] -->
+<!-- [Khi nào mở: Sửa bố cục trang, luồng điều hướng, kết nối dữ liệu/admin, quảng cáo affiliate hoặc thay màn hình bất kỳ] -->
 <html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#e44d26">
-    <title>Đọc Truyện</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <link rel="stylesheet" href="style.css">
-</head>
-<body data-theme="light">
-
-    <header id="topbar" class="topbar">
-        <div class="topbar-inner">
-            <button class="icon-btn" id="navHome" onclick="nav('/')" aria-label="Trang chủ"><i class="bi bi-house"></i></button>
-            <div class="brand" onclick="nav('/')"><span class="brand-mark">TO</span><span class="brand-text">Truyện Online</span></div>
-            <div class="topbar-actions">
-                <button class="icon-btn" id="navThemeBtn" onclick="cycleTheme()" aria-label="Đổi theme"><i class="bi bi-moon-stars"></i></button>
-                <button class="icon-btn" id="navSettings" onclick="nav('/settings')" aria-label="Cài đặt"><i class="bi bi-gear"></i></button>
-            </div>
-        </div>
-    </header>
-
-    <nav id="bottomnav" class="bottomnav" aria-label="Điều hướng">
-        <button class="bn-item" data-route="/" onclick="nav('/')"><i class="bi bi-house"></i><span>Trang chủ</span></button>
-        <button class="bn-item" data-route="/search" onclick="nav('/search')"><i class="bi bi-search"></i><span>Tìm kiếm</span></button>
-        <button class="bn-item" data-route="/library" onclick="nav('/library')"><i class="bi bi-bookmark"></i><span>Thư viện</span></button>
-        <button class="bn-item" data-route="/history" onclick="nav('/history')"><i class="bi bi-clock-history"></i><span>Lịch sử</span></button>
-        <button class="bn-item" data-route="/settings" onclick="nav('/settings')"><i class="bi bi-gear"></i><span>Cài đặt</span></button>
-    </nav>
-
-    <main id="app" class="app" aria-live="polite"></main>
-
-    <div id="toastHost" class="toast-host"></div>
-
-    <div id="readerOverlay" class="reader hidden">
-        <div id="readerTop" class="reader-top">
-            <button class="icon-btn" id="readerClose" onclick="exitReader()" aria-label="Đóng"><i class="bi bi-x-lg"></i></button>
-            <div class="reader-title" id="readerTitle"></div>
-            <button class="icon-btn" onclick="toggleReaderMenu()" aria-label="Menu"><i class="bi bi-list"></i></button>
-        </div>
-        <div id="readerSkeleton" class="reader-skeleton hidden"></div>
-        <div id="readerContent" class="reader-content"></div>
-        <div class="reader-progressbar"><div id="readerProgressFill"></div></div>
-        <div class="reader-nav">
-            <button id="readerPrev" onclick="readerNav(-1)" aria-label="Chương trước"><i class="bi bi-chevron-left"></i><span class="rn-label">Trước</span></button>
-            <button id="readerToc" onclick="toggleToc()" aria-label="Mục lục"><i class="bi bi-list-ul"></i><span class="rn-label">Mục lục</span></button>
-            <button id="readerNext" onclick="readerNav(1)" aria-label="Chương sau"><i class="bi bi-chevron-right"></i><span class="rn-label">Sau</span></button>
-        </div>
-
-        <div id="readerMenu" class="reader-menu hidden"></div>
-        <div id="readerTocPanel" class="reader-toc hidden"></div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#F5F6F8" />
+    <meta name="description" content="C2 Chill Chill Online — đọc truyện online miễn phí, cập nhật nhanh nhất các bộ truyện hay: Ngôn Tình, Tiên Hiệp, Kiếm Hiệp, Huyền Huyễn, Trinh Thám." />
+    <title>C2 Chill Chill Online - Đọc truyện miễn phí</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23E44D26'/%3E%3Ctext x='32' y='42' font-size='26' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EC2%3C/text%3E%3C/svg%3E">
+    <link rel="stylesheet" href="index.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="header-slot"></div>
+      <main id="content"></main>
+      <div id="nav-slot"></div>
     </div>
+    <div id="menu-slot"></div>
 
-    <script src="app.js"></script>
-</body>
+    <script type="module">
+      // [Nhiệm vụ: Ghép nối các mô-đun — điều hướng 5 tab, trang chủ, chi tiết, tìm kiếm nâng cao, thư viện 4 tab, lịch sử, cài đặt, khung đọc với mục lục + popup quảng cáo affiliate]
+      // [Đường dẫn: inline trong /index.html]
+      // [Khi nào mở: Sửa luồng điều hướng, kết nối dữ liệu/admin hoặc thay đổi cách kết nối các màn hình]
+
+      // ---------- Import mô-đun ----------
+      import { Theme } from './config/theme.js'
+      import { SiteConfig, AD_CHAPTERS } from './config/siteConfig.js'
+      import { ReaderLogic } from './modules/readerLogic.js'
+      import { StoryLogic } from './modules/storyLogic.js'
+      import { ApiService } from './services/apiService.js'
+      import { StoryStore } from './services/storyStore.js'
+      import { renderHeader, renderReaderHeader, C2_ICONS } from './components/Header.js'
+      import { renderBottomNav } from './components/BottomNav.js'
+      import { renderStoryCard, renderStoryGrid, renderStoryListRow, renderLibraryRow, renderHistoryRow, formatViews, chapterCount, storyRatingFor, storyViewsFor } from './components/StoryCard.js'
+      import { createReaderViewer } from './components/ReaderViewer.js'
+      import { createReaderMenu } from './components/ReaderMenu.js'
+      import { createReaderToc } from './components/ReaderToc.js'
+      import { createSettingsPanel } from './components/SettingsPanel.js'
+      import { createAdPopover } from './components/AdPopover.js'
+
+      // ---------- Dữ liệu (nguồn chung với admin) ----------
+      StoryStore.init()
+      StoryStore.publish()
+      const SAMPLE_STORIES = StoryStore.list({ public: true })
+      const STORY_MAP = new Map(StoryStore.list().map((s) => [String(s.id), s]))
+      window.addEventListener('pagehide', () => StoryStore.flush())
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') StoryStore.flush() })
+
+      // ---------- Khởi tạo & lấy phần tử ----------
+      Theme.init()
+      ReaderLogic.init()
+      SiteConfig.init()
+      SiteConfig.applyToDocument(document)
+
+      const headerSlot = document.getElementById('header-slot')
+      const content = document.getElementById('content')
+      const navSlot = document.getElementById('nav-slot')
+      const menuSlot = document.getElementById('menu-slot')
+
+      const readerMenu = createReaderMenu()
+      menuSlot.appendChild(readerMenu.el)
+      const readerToc = createReaderToc({ onSelect: gotoChapter })
+      menuSlot.appendChild(readerToc.el)
+      const adPopover = createAdPopover()
+      menuSlot.appendChild(adPopover.el)
+
+      const viewer = createReaderViewer({ onPrev: prevChapter, onNext: nextChapter, onToc: () => readerToc.open(currentStory, currentChapterIndex) })
+
+      // ---------- Trạng thái ----------
+      let currentTab = 'home'
+      let sourceTab = 'home'
+      let currentStory = null
+      let currentChapterIndex = 0
+      let readerActive = false
+      let pendingRestoreRatio = 0
+      let readerHeaderTitleEl = null
+      let readerThemeBtn = null
+      let adsShown = new Set()
+      let lastScrollTop = 0
+      let pendingAutoNext = null
+
+      // ---------- Header helper ----------
+      function themeBtnHtml() {
+        return `<button id="header-theme-btn" class="hd-icon" type="button" aria-label="Chuyển sáng/tối">${Theme.isDark() ? C2_ICONS.sun : C2_ICONS.moon}</button>`
+      }
+      const GEAR_HTML = `<button id="header-menu-btn" class="hd-icon" type="button" aria-label="Cài đặt">${C2_ICONS.gear}</button>`
+      const HEADER_RIGHT = () => themeBtnHtml() + GEAR_HTML
+
+      function setHeader(html, { onBack = null, onMenu = null } = {}) {
+        headerSlot.innerHTML = html
+        const back = headerSlot.querySelector('#header-back-btn')
+        if (back) back.addEventListener('click', onBack || (() => switchTab(sourceTab)))
+        const menu = headerSlot.querySelector('#header-menu-btn')
+        if (menu) menu.addEventListener('click', onMenu || (() => switchTab('settings')))
+        const theme = headerSlot.querySelector('#header-theme-btn')
+        if (theme) theme.addEventListener('click', toggleAppTheme)
+      }
+
+      function toggleAppTheme() {
+        Theme.setTheme(Theme.isDark() ? 'light' : 'dark')
+        const btn = headerSlot.querySelector('#header-theme-btn')
+        if (btn) btn.innerHTML = Theme.isDark() ? C2_ICONS.sun : C2_ICONS.moon
+      }
+
+      // ---------- Helpers ----------
+      function decodeEntities(s) {
+        let out = String(s ?? '')
+        for (let pass = 0; pass < 3; pass++) {
+          const prev = out
+          out = out
+            .replace(/&#(x[0-9a-fA-F]+|\d+);/g, (m, code) => {
+              const cp = code[0] === 'x' || code[0] === 'X' ? parseInt(code.slice(1), 16) : parseInt(code, 10)
+              if (!Number.isFinite(cp) || cp < 1 || cp > 0x10ffff) return '\uFFFD'
+              return String.fromCodePoint(cp)
+            })
+            .replace(/&(nbsp|amp|lt|gt|quot|apos|hellip|ndash|mdash|lsquo|rsquo|ldquo|rdquo|ensp|emsp|thinsp);/gi, (m, n) => (
+              { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", hellip: '…', ndash: '–', mdash: '—', lsquo: '\u2018', rsquo: '\u2019', ldquo: '\u201c', rdquo: '\u201d', ensp: ' ', emsp: ' ', thinsp: ' ' }[n.toLowerCase()] || m
+            ))
+          if (out === prev) break
+        }
+        return out
+      }
+      function escAttr(v) {
+        return String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      }
+      // Escape toàn bộ cho text/attr: biến mọi dữ liệu từ store (có thể do người dùng LAN
+      // đưa lên) thành văn bản thuần — chặn XSS khi render title/thể loại/chương/đoạn văn.
+      function esc(v) {
+        return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+      }
+      // Render văn án: tách \n thành các đoạn <p> (dòng trống = ngắt đoạn, \n đơn = xuống dòng <br>)
+      function paragraphHtml(desc, fallback = 'Chưa có mô tả.') {
+        const src = String(desc || '').trim()
+        if (!src) return `<p>${escAttr(fallback)}</p>`
+        const paras = []
+        let buf = []
+        src.split(/\r?\n/).forEach((ln) => {
+          const t = ln.trim()
+          if (!t) {
+            if (buf.length) { paras.push(buf); buf = [] }
+          } else {
+            buf.push(escAttr(decodeEntities(t)))
+          }
+        })
+        if (buf.length) paras.push(buf)
+        if (!paras.length) paras.push([escAttr(fallback)])
+        return paras.map((p) => `<p>${p.join('<br>')}</p>`).join('')
+      }
+      // Icon bookmark (đặc đặc khi đã lưu) — nút "Thêm thư viện" ở trang chi tiết
+      function bookmarkIcon(filled = false) {
+        return `<svg class="lib-bookmark" viewBox="0 0 24 24" width="16" height="16" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>`
+      }
+      // Icon tủ sách — trạng thái trống của Thư viện
+      function shelfIcon() {
+        return '<svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16M20 4v16M4 8h16M4 13h16M4 18h16"/><path d="M7 6h2M11 6h2M15 6h2M7 11h2M11 11h2M15 11h2M7 16h2M11 16h2M15 16h2"/></svg>'
+      }
+      function shuffle(arr) {
+        const a = [...arr]
+        for (let i = a.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[a[i], a[j]] = [a[j], a[i]]
+        }
+        return a
+      }
+      function withChapterBadge(story) {
+        if (story.latestChapter) return story
+        return { ...story, latestChapter: chapterCount(story) ? String(chapterCount(story)) : '' }
+      }
+      function chapterTitleInfo(ch) {
+        const m = String(ch ? ch.title : '').match(/^Chương\s+([\dIVXL]+)[\s:：-]*(.*)$/i)
+        if (m) return { num: 'Chương ' + m[1], sub: (m[2] || '').trim() }
+        return { num: ch ? ch.title : '', sub: '' }
+      }
+      function emptyState(title, desc, { icon = '' } = {}) {
+        return `<div class="empty-state">${icon ? `<div class="empty-icon">${icon}</div>` : ''}<p class="empty-title">${title}</p><p class="empty-desc">${desc}</p></div>`
+      }
+
+      function wireStoryClicks(container, openFn = openStory) {
+        container.querySelectorAll('[data-id]').forEach((el) => {
+          el.addEventListener('click', () => {
+            const story = STORY_MAP.get(String(el.dataset.id))
+            if (story) openFn(story.id)
+          })
+        })
+      }
+      function getInterestedGenres() {
+        const ids = new Set()
+        ;[...ReaderLogic.getLibrary().map((e) => e.id), ...ReaderLogic.getHistory().map((h) => h.storyId)].forEach((id) => ids.add(String(id)))
+        const genres = new Set()
+        ids.forEach((id) => {
+          const s = STORY_MAP.get(id)
+          if (s) (s.genres || []).forEach((g) => genres.add(g))
+        })
+        return [...genres]
+      }
+
+      // ================= TRANG CHỦ =================
+      // Khung slider ngang dùng chung cho "Phổ biến" và "Đề xuất" (13 truyện / đề xuất)
+      function railBlock(cardsHtml) {
+        return `<div class="hrail-wrap">
+          <button type="button" class="rail-arrow rail-prev" aria-label="Lùi" hidden>&#8249;</button>
+          <div class="hrail">${cardsHtml}</div>
+          <button type="button" class="rail-arrow rail-next" aria-label="Tiến" hidden>&#8250;</button>
+        </div>`
+      }
+      function wireRailScroll(scope) {
+        if (scope._railWired) return
+        scope._railWired = true
+        scope.querySelectorAll('.hrail-wrap').forEach((wrap) => {
+          const rail = wrap.querySelector('.hrail')
+          const card = rail.querySelector('.story-card')
+          const step = () => ((card ? card.getBoundingClientRect().width + 10 : 354) * 3)
+          const prev = wrap.querySelector('.rail-prev')
+          const next = wrap.querySelector('.rail-next')
+          const upd = () => {
+            prev.hidden = rail.scrollLeft < 8
+            next.hidden = rail.scrollLeft + rail.clientWidth >= rail.scrollWidth - 1
+          }
+          prev.addEventListener('click', () => rail.scrollBy({ left: -step(), behavior: 'smooth' }))
+          next.addEventListener('click', () => rail.scrollBy({ left: step(), behavior: 'smooth' }))
+          rail.addEventListener('scroll', upd, { passive: true })
+          rail.addEventListener('scrollend', upd, { passive: true })
+          upd()
+        })
+      }
+
+      async function showHome() {
+        currentTab = 'home'
+        renderNav('home')
+        setHeader(renderHeader({ brand: true, rightAction: HEADER_RIGHT() }))
+
+        const stories = await ApiService.getStoriesFromLocal(SAMPLE_STORIES)
+
+        const homeEl = document.createElement('div')
+        homeEl.className = 'home'
+        homeEl.innerHTML = `
+          <form class="qs" autocomplete="off">
+            <span class="qs-ico">${C2_ICONS.search}</span>
+            <input class="qs-input" placeholder="Tìm truyện nhanh..." value="">
+            <button type="button" class="qs-clear" hidden aria-label="Xóa">&#10005;</button>
+          </form>
+        `
+
+        const popular = StoryLogic.sort(stories, 'views').slice(0, 13)
+        const updated = StoryLogic.sort(stories, 'latest').slice(0, 30)
+        const suggest = StoryLogic.recommend(stories, { genres: getInterestedGenres(), limit: 13 })
+
+        homeEl.insertAdjacentHTML('beforeend', `
+          <section class="sec">
+            <div class="sec-head"><h2>Phổ biến</h2></div>
+            ${railBlock(popular.map((s) => renderStoryCard(withChapterBadge(s), { homeMeta: true })).join(''))}
+          </section>
+          <section class="sec">
+            <div class="sec-head"><h2>Mới Cập Nhật</h2></div>
+            <div class="stack">${updated.map((s) => renderStoryListRow(withChapterBadge(s))).join('')}</div>
+          </section>
+          ${suggest.length ? `
+          <section class="sec">
+            <div class="sec-head"><h2>Đề Xuất</h2></div>
+            ${railBlock(suggest.map((s) => renderStoryCard(withChapterBadge(s), { homeMeta: true })).join(''))}
+          </section>` : ''}
+        `)
+
+        content.innerHTML = ''
+        content.appendChild(homeEl)
+
+        // Tìm kiếm nhanh
+        const qs = homeEl.querySelector('.qs')
+        const qsInput = qs.querySelector('.qs-input')
+        const qsClear = qs.querySelector('.qs-clear')
+        qs.addEventListener('submit', (e) => { e.preventDefault(); switchTab('search', qsInput.value.trim()) })
+        qs.addEventListener('click', (e) => {
+          if (e.target.closest('.qs-clear')) return
+          if (e.target.closest('.qs-ico')) switchTab('search', qsInput.value.trim())
+        })
+        qsInput.addEventListener('input', () => { qsClear.hidden = !qsInput.value })
+        qsClear.addEventListener('click', () => { qsInput.value = ''; qsClear.hidden = true; qsInput.focus() })
+
+        wireStoryClicks(homeEl)
+        wireRailScroll(homeEl)
+      }
+
+      // ================= TÌM KIẾM NÂNG CAO =================
+      function showSearch(initialQuery = '') {
+        currentTab = 'search'
+        renderNav('search')
+        setHeader(renderHeader({ title: 'Tìm kiếm', rightAction: HEADER_RIGHT() }))
+
+        const genres = ['Tất cả thể loại', ...StoryLogic.getGenres(SAMPLE_STORIES)]
+        let selGenres = []
+        let selStatus = ''
+        let selSort = 'views'
+
+        content.innerHTML = `
+          <div class="search-page">
+            <form class="search-bar" autocomplete="off">
+              <span class="sr-ico">${C2_ICONS.search}</span>
+              <input type="search" class="search-input" placeholder="Tìm tên truyện..." value="">
+              <button type="button" class="qs-clear sr-clear" hidden aria-label="Xóa">&#10005;</button>
+            </form>
+
+            <div class="fl-genres genre-chips">
+              ${genres.map((g) => `<button type="button" class="chip${g === 'Tất cả thể loại' ? ' active' : ''}" data-genre="${escAttr(g)}">${esc(g)}</button>`).join('')}
+            </div>
+
+            <div class="fl-status genre-chips">
+              ${['Tất cả trạng thái', 'FULL', 'Đang ra'].map((s) => `<button type="button" class="chip${s === 'Tất cả trạng thái' ? ' active' : ''}" data-status="${escAttr(s)}">${s}</button>`).join('')}
+            </div>
+
+            <div class="sort-row">
+              ${[['rating', 'Đánh giá'], ['views', 'Phổ biến'], ['latest', 'Chương mới'], ['name', 'A-Z']]
+                .map(([k, label]) => `<button type="button" class="chip sort-chip${k === selSort ? ' active' : ''}" data-sort="${k}">${label}</button>`).join('')}
+            </div>
+
+            <div class="results" id="search-results"></div>
+          </div>
+        `
+
+        const input = content.querySelector('.search-input')
+        const clearBtn = content.querySelector('.sr-clear')
+        const results = content.querySelector('#search-results')
+
+        function run() {
+          const filtered = StoryLogic.filter(SAMPLE_STORIES, { query: input.value, genres: selGenres, status: selStatus })
+          const sorted = StoryLogic.sort(filtered, selSort)
+          results.innerHTML = ''
+          if (!sorted.length) {
+            results.innerHTML = emptyState('Không tìm thấy', 'Thử lại với từ khóa hoặc bộ lọc khác nhé.')
+            return
+          }
+          results.innerHTML = renderStoryGrid(sorted, { homeMeta: true })
+          wireStoryClicks(results)
+        }
+
+        content.addEventListener('click', (e) => {
+          const g = e.target.closest('[data-genre]')
+          if (g) {
+            const val = g.dataset.genre
+            if (val === 'Tất cả thể loại') {
+              selGenres = []
+              content.querySelectorAll('.fl-genres .chip').forEach((c) => c.classList.toggle('active', c === g))
+            } else {
+              const idx = selGenres.indexOf(val)
+              if (idx >= 0) selGenres.splice(idx, 1); else selGenres.push(val)
+              g.classList.toggle('active')
+              content.querySelector('.fl-genres [data-genre="Tất cả thể loại"]')?.classList.remove('active')
+            }
+            run()
+            return
+          }
+          const st = e.target.closest('[data-status]')
+          if (st) {
+            selStatus = st.dataset.status === 'Tất cả trạng thái' ? '' : st.dataset.status
+            content.querySelectorAll('.fl-status .chip').forEach((c) => c.classList.toggle('active', c === st))
+            run()
+            return
+          }
+          const so = e.target.closest('[data-sort]')
+          if (so) {
+            selSort = so.dataset.sort
+            content.querySelectorAll('.sort-chip').forEach((c) => c.classList.toggle('active', c === so))
+            run()
+          }
+        })
+
+        let timer = null
+        input.addEventListener('input', () => {
+          clearBtn.hidden = !input.value
+          clearTimeout(timer)
+          timer = setTimeout(run, 200)
+        })
+        clearBtn.addEventListener('click', () => { input.value = ''; clearBtn.hidden = true; run(); input.focus() })
+        content.querySelector('.search-bar').addEventListener('submit', (e) => { e.preventDefault(); run() })
+
+        if (initialQuery) { input.value = initialQuery; clearBtn.hidden = false }
+        run()
+      }
+
+      // ================= THƯ VIỆN (4 tab) =================
+      const LIB_TABS = [['all', 'Tất cả'], ['saved', 'Đã lưu'], ['reading', 'Đang đọc'], ['done', 'Hoàn thành']]
+      let libTab = 'all'
+
+      function showLibrary() {
+        currentTab = 'library'
+        renderNav('library')
+        setHeader(renderHeader({ title: 'Thư viện', rightAction: HEADER_RIGHT() }))
+
+        const lib = document.createElement('div')
+        lib.className = 'lib-page'
+        lib.innerHTML = `
+          <div class="tab-row">
+            ${LIB_TABS.map(([k, label]) => `<button type="button" class="lib-tab${k === libTab ? ' active' : ''}" data-tab="${k}">${label}</button>`).join('')}
+          </div>
+          <div class="lib-list" id="lib-list"></div>
+        `
+        content.innerHTML = ''
+        content.appendChild(lib)
+        renderLib()
+        wireLibControls(lib)
+      }
+
+      function libFiltered() {
+        const entries = ReaderLogic.getLibrary()
+        const withProgress = entries.map((e) => ({ entry: e, story: STORY_MAP.get(String(e.id)), prog: ReaderLogic.getProgress(e.id) })).filter((x) => x.story)
+        if (libTab === 'all') return withProgress
+        if (libTab === 'saved') return withProgress.filter((x) => !x.prog)
+        if (libTab === 'reading') return withProgress.filter((x) => x.entry.status === 'reading')
+        return withProgress.filter((x) => x.entry.status === 'done')
+      }
+
+      function renderLib() {
+        const listEl = content.querySelector('#lib-list')
+        const items = libFiltered()
+        if (!items.length) {
+          listEl.innerHTML = emptyState('Chưa có gì trong thư viện', 'Bấm "Thêm thư viện" ở trang truyện.', { icon: shelfIcon() })
+          return
+        }
+        listEl.innerHTML = items.map(({ story, entry, prog }) => {
+          const ch = prog ? `Chương ${Math.min(prog.chapterIndex + 1, chapterCount(story))}` : ''
+          return renderLibraryRow(withChapterBadge(story), entry, { chapter: ch })
+        }).join('')
+        listEl.querySelectorAll('.lib-row').forEach((row) => {
+          const sid = row.dataset.id
+          row.addEventListener('click', (e) => {
+            if (e.target.closest('.lib-btn')) return
+            openStory(sid)
+          })
+          row.querySelector('[data-act="remove"]').addEventListener('click', (e) => {
+            e.stopPropagation()
+            ReaderLogic.removeFromLibrary(sid)
+            renderLib()
+          })
+          row.querySelector('[data-act="branch"]').addEventListener('click', (e) => {
+            e.stopPropagation()
+            const next = row.querySelector('[data-act="branch"]').dataset.status === 'done' ? 'reading' : 'done'
+            ReaderLogic.setLibraryStatus(sid, next)
+            renderLib()
+          })
+        })
+      }
+
+      function wireLibControls(lib) {
+        lib.querySelectorAll('.lib-tab').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            libTab = btn.dataset.tab
+            lib.querySelectorAll('.lib-tab').forEach((b) => b.classList.toggle('active', b === btn))
+            renderLib()
+          })
+        })
+      }
+
+      // ================= LỊCH SỬ =================
+      function showHistory() {
+        currentTab = 'history'
+        renderNav('history')
+        setHeader(renderHeader({ title: 'Lịch sử', rightAction: HEADER_RIGHT() }))
+
+        const hist = document.createElement('div')
+        hist.className = 'hist-page'
+
+        const entries = ReaderLogic.getHistory()
+          .map((h) => ({ h, story: STORY_MAP.get(String(h.storyId)) }))
+          .filter((x) => x.story)
+
+        hist.innerHTML = entries.length ? `
+          <div class="hist-actions"><button type="button" class="btn-soft btn-danger-soft" id="hist-clear">Xóa tất cả</button></div>
+        ` : ''
+
+        const listEl = document.createElement('div')
+        listEl.className = 'lib-list'
+        if (!entries.length) {
+          listEl.innerHTML = emptyState('Chưa có lịch sử đọc', 'Những truyện bạn từng đọc sẽ xuất hiện ở đây.', { icon: '🕘' })
+        } else {
+          listEl.innerHTML = entries.map(({ h, story }) => {
+            const ch = `Chương ${Math.min(h.chapterIndex + 1, chapterCount(story))}`
+            const time = ReaderLogic.formatTime(h.time)
+            return renderHistoryRow(withChapterBadge(story), { chapter: ch, time })
+          }).join('')
+          listEl.querySelectorAll('.lib-row').forEach((row) => {
+            row.addEventListener('click', () => openStory(row.dataset.id))
+          })
+        }
+        hist.appendChild(listEl)
+        content.innerHTML = ''
+        content.appendChild(hist)
+
+        const clearBtn = hist.querySelector('#hist-clear')
+        if (clearBtn) {
+          clearBtn.addEventListener('click', () => {
+            if (!confirm('Xóa toàn bộ lịch sử đọc?')) return
+            ReaderLogic.getHistory().forEach((h) => {
+              ReaderLogic.clearProgress(h.storyId)
+              ReaderLogic.clearDraft(h.storyId, h.chapterId)
+            })
+            showHistory()
+          })
+        }
+      }
+
+      // ================= CÀI ĐẶT =================
+      let settingsPanel = null
+      function showSettings() {
+        currentTab = 'settings'
+        renderNav('settings')
+        setHeader(renderHeader({ title: 'Cài đặt' }))
+
+        content.innerHTML = ''
+        settingsPanel = createSettingsPanel({ sections: ['interface', 'reading', 'data'] })
+        content.appendChild(settingsPanel.el)
+      }
+
+      // ================= TRANG CHI TIẾT TRUYỆN =================
+      function openStory(storyId) {
+        const story = STORY_MAP.get(String(storyId))
+        if (!story) return
+        StoryStore.incrementClick(storyId)
+        sourceTab = currentTab === 'reader' ? sourceTab : (currentTab === 'detail' ? sourceTab : currentTab)
+        currentStory = story
+        renderDetail()
+      }
+
+      function renderDetail() {
+        const story = currentStory
+        const isFull = story.status === 'Hoàn thành'
+        const nChapter = (story.chapters || []).length
+        const prog = ReaderLogic.getProgress(story.id)
+        const inLibrary = ReaderLogic.isInLibrary(story.id)
+        const resume = prog && prog.chapterIndex > 0
+
+        currentTab = 'detail'
+        renderNav(sourceTab)
+        setHeader(renderHeader({ title: 'Chi tiết truyện', showBack: true, rightAction: HEADER_RIGHT() }))
+
+        const related = StoryLogic.recommend(SAMPLE_STORIES, { genres: story.genres || [], excludeId: story.id, limit: 5 })
+
+        content.innerHTML = `
+          <div class="detail">
+            <div class="detail-hero">
+              <div class="detail-cover">
+                ${story.cover ? `<img src="${esc(story.cover)}" alt="${esc(story.title)}" />` : '<span class="detail-cover-ph">📗</span>'}
+              </div>
+              <div class="detail-info">
+                <h1 class="dt-title">${esc(story.title)}</h1>
+                <p class="dt-sub">${escAttr((story.author || '').trim() && (story.author || '').trim().toLowerCase() !== 'không rõ' ? (story.author || '').trim() : '---')}</p>
+                <div class="dt-tags">
+                  ${(story.genres || []).map((g) => `<span class="dt-tag dt-tag-genre">${esc(g)}</span>`).join('')}
+                  <span class="dt-tag ${isFull ? 'dt-tag-full' : 'dt-tag-hot'}">${isFull ? 'FULL' : 'Đang ra'}</span>
+                  <span class="dt-tag dt-tag-rating">★ ${storyRatingFor(story.id)}</span>
+                </div>
+                <p class="dt-meta">${formatViews(storyViewsFor(story.id))} lượt xem · ${nChapter} chương</p>
+              </div>
+            </div>
+
+            <div class="detail-actions">
+              <button type="button" class="btn-primary" data-act="start">▶ &nbsp;${resume ? 'Đọc tiếp' : 'Đọc từ đầu'}</button>
+              <div class="act-row">
+                <button type="button" class="btn-soft" data-act="latest">Chương mới nhất</button>
+                <button type="button" class="btn-soft" data-act="lib" data-in="${inLibrary}">${bookmarkIcon(inLibrary)} ${inLibrary ? 'Đã lưu' : 'Thêm thư viện'}</button>
+              </div>
+            </div>
+
+            <section class="sec">
+              <div class="sec-head"><h2>Giới thiệu</h2></div>
+              <div class="synopsis" id="synopsis">${paragraphHtml(story.description)}</div>
+            </section>
+
+            <section class="sec">
+              <div class="sec-head"><h2>Danh sách chương</h2><span class="sec-count">${nChapter} chương</span></div>
+              <div class="chp-search"><span class="chp-search-ico">${C2_ICONS.search}</span><input type="search" class="chp-input" placeholder="Tìm chương..." /></div>
+              <div class="chp-list" id="chp-list"></div>
+            </section>
+
+            ${related.length ? `
+            <section class="sec">
+              <div class="sec-head"><h2>Truyện đề xuất</h2></div>
+              <div class="stack" id="related">${related.map((s) => renderStoryListRow(withChapterBadge(s), { right: `<span class="star-rating"><span class="star-ico">★</span> ${storyRatingFor(s.id)}</span>` })).join('')}</div>
+            </section>` : ''}
+          </div>
+        `
+
+        // Văn án: đọc thêm / thu gọn
+        const syn = content.querySelector('#synopsis')
+        if ((story.description || '').length > 90) {
+          syn.classList.add('collapsed')
+          const toggle = document.createElement('button')
+          toggle.type = 'button'
+          toggle.className = 'syn-toggle'
+          toggle.textContent = 'Đọc thêm'
+          syn.parentElement.appendChild(toggle)
+          toggle.addEventListener('click', () => {
+            const open = syn.classList.toggle('collapsed')
+            toggle.textContent = open ? 'Đọc thêm' : 'Thu gọn'
+          })
+        }
+
+        // Nút hành động
+        content.querySelector('[data-act="start"]').addEventListener('click', () => {
+          openReader(story.id, resume ? prog.chapterIndex : 0, !!resume)
+        })
+        content.querySelector('[data-act="latest"]').addEventListener('click', () => {
+          openReader(story.id, Math.max(0, nChapter - 1))
+        })
+        const btnLib = content.querySelector('[data-act="lib"]')
+        btnLib.addEventListener('click', () => {
+          const saved = ReaderLogic.isInLibrary(story.id)
+          if (saved) ReaderLogic.removeFromLibrary(story.id)
+          else ReaderLogic.addToLibrary(story)
+          btnLib.dataset.in = saved ? 'false' : 'true'
+          btnLib.innerHTML = `${bookmarkIcon(!saved)} ${saved ? 'Thêm thư viện' : 'Đã lưu'}`
+        })
+
+        // Danh sách chương
+        const chpList = content.querySelector('#chp-list')
+        function renderChapters(filter = '') {
+          const chapters = (story.chapters || []).filter((ch) => ch.title.toLowerCase().includes(filter.toLowerCase()))
+          chpList.innerHTML = chapters.map((ch, k) => {
+            const globalIndex = (story.chapters || []).indexOf(ch)
+            const reading = prog && prog.chapterId === ch.id
+            const { num, sub } = chapterTitleInfo(ch)
+            return `
+              <div class="chp-item" data-chidx="${globalIndex}">
+                <span class="chp-idx">${esc(num)}</span>
+                ${sub ? `<span class="chp-title">${esc(sub)}</span>` : ''}
+                <span class="chp-state ${reading ? 'on' : ''}">${reading ? 'Đang đọc' : ''}</span>
+              </div>
+            `
+          }).join('') || '<p class="chp-empty">Không tìm thấy chương.</p>'
+          chpList.querySelectorAll('.chp-item').forEach((el) => {
+            el.addEventListener('click', () => {
+              const idx = Number(el.dataset.chidx)
+              openReader(story.id, idx, prog && prog.chapterIndex === idx)
+            })
+          })
+        }
+        renderChapters()
+        content.querySelector('.chp-input').addEventListener('input', (e) => renderChapters(e.target.value))
+
+        wireStoryClicks(content.querySelector('#related'))
+
+        // LUÔN đứng ở đầu trang chi tiết mỗi khi view chi tiết được vẽ
+        scrollDetailToTop()
+      }
+
+      // ================= KHUNG ĐỌC =================
+      function openTocSheet() {
+        if (!currentStory) return
+        readerMenu.close()
+        readerToc.open(currentStory, currentChapterIndex)
+      }
+      function openReaderMenu() {
+        readerToc.close()
+        readerMenu.open()
+      }
+
+      function gotoChapter(i) {
+        if (i === currentChapterIndex) { readerToc.close(); return }
+        saveReadingState({ asDraft: true })
+        currentChapterIndex = i
+        renderChapter()
+        readerToc.close()
+      }
+
+      function toggleReaderTheme() {
+        Theme.setTheme(Theme.isDark() ? 'light' : 'dark')
+        if (readerThemeBtn) readerThemeBtn.innerHTML = Theme.isDark() ? C2_ICONS.sun : C2_ICONS.moon
+      }
+
+      function openReader(storyId, chapterIndex = 0, restoreRatio = false) {
+        const story = STORY_MAP.get(String(storyId))
+        if (!story || !story.chapters.length) return
+
+        currentStory = story
+        currentChapterIndex = Math.max(0, Math.min(chapterIndex, story.chapters.length - 1))
+        const prog = ReaderLogic.getProgress(story.id)
+        pendingRestoreRatio = restoreRatio && prog && prog.chapterIndex === currentChapterIndex ? (prog.scrollRatio || 0) : 0
+
+        readerActive = true
+        setHeader(renderReaderHeader({ title: story.title, isDark: Theme.isDark() }), { onMenu: openReaderMenu })
+
+        readerHeaderTitleEl = document.getElementById('reader-header-title')
+        readerThemeBtn = document.getElementById('reader-theme-btn')
+
+        document.getElementById('reader-home-btn').addEventListener('click', () => switchTab('home'))
+        document.getElementById('reader-back-btn').addEventListener('click', exitReader)
+        readerThemeBtn.addEventListener('click', toggleReaderTheme)
+        document.getElementById('reader-settings-btn').addEventListener('click', openReaderMenu)
+        document.getElementById('reader-menu-btn').addEventListener('click', openTocSheet)
+
+        document.body.classList.add('reading')
+
+        navSlot.innerHTML = ''
+        content.innerHTML = ''
+        const wrap = document.createElement('div')
+        wrap.className = 'reader-wrap'
+        wrap.appendChild(viewer.el)
+        content.appendChild(wrap)
+
+        lastScrollTop = content.scrollTop
+        renderChapter()
+      }
+
+      function buildChapterHTML(chapter) {
+        return (chapter.paragraphs || []).map((p) => `<p>${esc(p)}</p>`).join('')
+      }
+
+      // Cuộn ngay lập tức về đầu (hoặc vị trí ratio) khi chuyển chương / vào chương
+      // — bỏ qua css scroll-behavior:smooth để không bị "cuộn mượt" làm delay
+      function scrollReaderInstantly(ratio = 0) {
+        const root = document.documentElement
+        const prev = root.style.scrollBehavior
+        root.style.scrollBehavior = 'auto'
+        window.scrollTo(0, ratio > 0 ? ratio * Math.max(0, root.scrollHeight - window.innerHeight) : 0)
+        content.scrollTop = ratio > 0 && content.scrollHeight > content.clientHeight ? ratio * (content.scrollHeight - content.clientHeight) : 0
+        root.style.scrollBehavior = prev
+      }
+
+      // Cuộn trang chi tiết lên đầu ngay khi được hiển thị — tránh người dùng bị kẹt
+      // ở vị trí giữa/cuối trang sau khi click truyện từ nửa dưới trang chủ/danh sách.
+      // Bỏ qua scroll-behavior:smooth để nhảy về (0,0) tức thì, không bị lag.
+      function scrollDetailToTop() {
+        const root = document.documentElement
+        const prev = root.style.scrollBehavior
+        root.style.scrollBehavior = 'auto'
+        window.scrollTo(0, 0)
+        content.scrollTop = 0
+        root.style.scrollBehavior = prev
+      }
+
+      function renderChapter() {
+        const story = currentStory
+        const chapter = story.chapters[currentChapterIndex]
+
+        if (!chapter) {
+          viewer.showError('Không tìm thấy chương này.')
+          return
+        }
+
+        const info = chapterTitleInfo(chapter)
+        viewer.setChapter({
+          storyId: story.id,
+          title: chapter.title,
+          chNum: info.num,
+          chSub: info.sub,
+          contentHTML: buildChapterHTML(chapter),
+          chapterIndex: currentChapterIndex,
+          chapterCount: story.chapters.length,
+          hasPrev: currentChapterIndex > 0,
+          hasNext: currentChapterIndex < story.chapters.length - 1,
+        })
+
+        if (readerHeaderTitleEl) readerHeaderTitleEl.textContent = story.title
+
+        // Popup quảng cáo affiliate: chỉ ở chương được cấu hình (2,4,6...), 1 lần/chương
+        const ads = SiteConfig.getAd()
+        const chNum = currentChapterIndex + 1
+        if (ads && AD_CHAPTERS.includes(chNum) && !adsShown.has(chNum)) {
+          adsShown.add(chNum)
+          adPopover.show({ links: ads })
+        }
+
+        scrollReaderInstantly(0)
+        // LUÔN hiển thị đầy đủ thanh công cụ ngay khi vừa vào / chuyển chương:
+        // gỡ chrome-hidden (không bao giờ ẩn ngay lúc render chương) + reset lại
+        // lastScrollTop để các scroll event "ủi" lúc transition không kích hoạt ẩn.
+        document.body.classList.remove('chrome-hidden')
+        document.body.classList.add('chrome-shown')
+        lastScrollTop = content.scrollTop || 0
+        if (readerThemeBtn) readerThemeBtn.innerHTML = Theme.isDark() ? C2_ICONS.sun : C2_ICONS.moon
+
+        if (pendingRestoreRatio > 0.02) {
+          requestAnimationFrame(() => {
+            scrollReaderInstantly(pendingRestoreRatio)
+          })
+          pendingRestoreRatio = 0
+        }
+      }
+
+      function currentChapter() {
+        return currentStory && currentStory.chapters[currentChapterIndex]
+      }
+
+      function scrollRatio() {
+        const max = content.scrollHeight - content.clientHeight
+        return max > 0 ? Math.min(1, content.scrollTop / max) : 0
+      }
+
+      function saveReadingState({ asDraft = false } = {}) {
+        if (!currentStory) return
+        if (!Theme.settings.autoSavePosition) return
+        const chapter = currentChapter()
+        if (!chapter) return
+        const ratio = scrollRatio()
+        ReaderLogic.saveProgress(currentStory.id, {
+          chapterId: chapter.id,
+          chapterIndex: currentChapterIndex,
+          scrollRatio: ratio,
+        })
+        if (asDraft || Theme.settings.autoSavePosition) {
+          ReaderLogic.saveDraft(currentStory.id, chapter.id, {
+            contentHTML: buildChapterHTML(chapter),
+            scrollRatio: ratio,
+          })
+        }
+      }
+
+      let scrollTimer = null
+      content.addEventListener('scroll', () => {
+        if (!readerActive || !currentStory) return
+
+        const ratio = scrollRatio()
+        viewer.setProgress(ratio)
+
+        clearTimeout(scrollTimer)
+        scrollTimer = setTimeout(() => saveReadingState(), 250)
+
+        // Ẩn/hiện toolbar theo hướng cuộn
+        if (Theme.settings.hideToolbar) {
+          const dY = content.scrollTop - lastScrollTop
+          if (dY > 10) document.body.classList.add('chrome-hidden')
+          else if (dY < -10) document.body.classList.remove('chrome-hidden')
+        }
+        lastScrollTop = content.scrollTop
+
+        // Tự sang chương tiếp khi cuộn hết chương
+        if (Theme.settings.autoNextChapter && ratio > 0.985 && currentChapterIndex < currentStory.chapters.length - 1) {
+          if (!pendingAutoNext) {
+            pendingAutoNext = setTimeout(() => {
+              pendingAutoNext = null
+              nextChapter()
+            }, 600)
+          }
+        } else if (pendingAutoNext && ratio <= 0.985) {
+          clearTimeout(pendingAutoNext)
+          pendingAutoNext = null
+        }
+      })
+
+      // Chạm vào nội dung để hiện/ẩn thanh công cụ
+      // Lưu ý: chỉ toggle khi chạm NGAY TRONG vùng nội dung đọc (.reader-viewer);
+      // bấm mở/đổi chương (nổi bọt từ trang chi tiết) tuyệt đối không được ẩn thanh công cụ.
+      content.addEventListener('click', (e) => {
+        if (!readerActive) return
+        if (e.target.closest('a, button')) return
+        if (!Theme.settings.hideToolbar) return
+        if (!e.target.closest('.reader-viewer')) return
+        document.body.classList.toggle('chrome-hidden')
+      })
+
+      function prevChapter() {
+        if (currentChapterIndex <= 0) return
+        saveReadingState({ asDraft: true })
+        currentChapterIndex--
+        renderChapter()
+      }
+      function nextChapter() {
+        if (!currentStory || currentChapterIndex >= currentStory.chapters.length - 1) return
+        saveReadingState({ asDraft: true })
+        currentChapterIndex++
+        renderChapter()
+      }
+      function exitReader() {
+        saveReadingState({ asDraft: true })
+        readerActive = false
+        document.body.classList.remove('reading', 'chrome-hidden', 'chrome-shown')
+        renderDetail()
+      }
+
+      // ---------- Điều hướng tab ----------
+      const NAV_ID_MAP = { home: 'home', search: 'search', library: 'library', history: 'history', settings: 'settings', detail: 'home' }
+
+      function renderNav(activeTab) {
+        if (activeTab === 'reader') { navSlot.innerHTML = ''; return }
+        const id = NAV_ID_MAP[activeTab] || activeTab || 'home'
+        navSlot.innerHTML = renderBottomNav(id)
+        navSlot.querySelectorAll('.bottom-nav-item').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const tab = btn.dataset.tab
+            // Toggle: bấm lại chính nút đang active (trừ Trang chủ) → đóng, trở về Trang chủ
+            if (tab !== 'home' && tab === currentTab) switchTab('home')
+            else switchTab(tab)
+          })
+        })
+      }
+
+      function switchTab(tab, query) {
+        if (readerActive && currentStory) {
+          saveReadingState({ asDraft: true })
+          readerActive = false
+          document.body.classList.remove('reading', 'chrome-hidden', 'chrome-shown')
+        }
+        readerMenu.close()
+        readerToc.close()
+        adPopover.hide()
+
+        if (tab === 'home') showHome()
+        else if (tab === 'search') showSearch(query || '')
+        else if (tab === 'library') showLibrary()
+        else if (tab === 'history') showHistory()
+        else if (tab === 'settings') showSettings()
+      }
+
+      // ---------- Khởi chạy ----------
+      const deepId = new URLSearchParams(location.search).get('s')
+      if (deepId != null) {
+        if (STORY_MAP.has(String(deepId))) openStory(String(deepId))
+        else switchTab('home')
+      } else {
+        switchTab('home')
+      }
+    </script>
+  </body>
 </html>

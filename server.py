@@ -1,701 +1,331 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Server local cho SPA "Do Truyen" (index.html/app.js/style.css).
-
-Doc du lieu ma scraper.py da tao:
-  data/meta/<slug>.json      -> meta + danh sach chuong
-  data/chapters/<slug>_N.txt -> noi dung chuong
-  covers/<slug>.<ext>        -> anh bia
-
-Cung cap:
-  - lenh tinh (static): /, /app.js, /style.css, /covers/..., /Banner/...
-  - API cho SPA (xem app.js): /api/home, /api/novels, /api/novel/:slug,
-    /api/genres, /api/banner, /api/local/chapter
-  - API admin: /api/admin/login, /api/admin/config, /api/local/status,
-    /api/local/sync, SSE sync-check / fetch-all / fetch-covers,
-    /api/local/check-report, POST /api/local/fetch-specified,
-    POST /api/local/import (dung de scraper.py --api upload)
-"""
-
-import argparse
-import base64
+# [Nhiệm vụ của file]: Server web + API lưu dữ liệu dùng chung cho C2 Chill Chill Online.
+# - Phục vụ tĩnh toàn bộ thư mục D:\WEB (web + admin) như python -m http.server.
+# - GET  /api/store -> trả JSON data truyện hiện tại (file data/store.json).
+# - POST /api/store -> ghi data mới từ client vào file (mọi thiết bị dùng chung một nguồn).
+# data/store.json là nguồn dữ liệu thật; browser localStorage chỉ đóng vai trò cache dự phòng.
 import json
 import os
-import queue
-import re
-import struct
 import sys
-import threading
-import time
-import zlib
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, unquote, urlparse
+import socket
+import ipaddress
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse, parse_qs
+import urllib.request
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(ROOT, "data")
-META_DIR = os.path.join(DATA_DIR, "meta")
-CHAP_DIR = os.path.join(DATA_DIR, "chapters")
-COVERS_DIR = os.path.join(ROOT, "covers")
-BANNER_DIR = os.path.join(ROOT, "Banner")
-CONFIG_FILE = os.path.join(ROOT, "config.json")
-DEFAULT_BANNER = "/Banner/Banner_Shopee.png"
-DEFAULT_PASSWORD = "admin"
+DATA_DIR = os.path.join(ROOT, 'data')
+DATA_FILE = os.path.join(DATA_DIR, 'store.json')
+DEFAULTS = {'added': [], 'updated': {}, 'removed': [], 'clicks': {}}
 
-MIME = {
-    ".html": "text/html; charset=utf-8",
-    ".js": "application/javascript; charset=utf-8",
-    ".css": "text/css; charset=utf-8",
-    ".json": "application/json; charset=utf-8",
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".webp": "image/webp",
-    ".gif": "image/gif",
-    ".svg": "image/svg+xml",
-    ".ico": "image/x-icon",
-    ".txt": "text/plain; charset=utf-8",
-}
+# Chỉ cho phép crawl từ các nguồn đã được cấu hình — tránh biến thành open proxy.
+ALLOWED_CRAWL_HOSTS = ['truyen2k.com', 'monkeydd.com', 'kiwiiudammy.com', 'bienxinhtruyen.com']
 
-tokens = {}          # token -> expiry ts
-CONFIG = {}          # {"password":..., "banner": {...}}
-INDEX = {}           # slug -> meta dict
-lastSync = 0
-syncRunning = False
-LAST_REPORT = None
-JOB_LOCK = threading.Lock()
-_chapSlugs_cache = None
-_chapSlugs_cache_at = 0.0
+# Giới hạn dữ liệu nhận về để chống DoS qua bộ nhớ.
+MAX_STORE_BYTES = 12 * 1024 * 1024        # toàn bộ payload POST /api/store
+MAX_HTML_BYTES = 2 * 1024 * 1024          # trang HTML crawl
+MAX_IMAGE_BYTES = 8 * 1024 * 1024         # ảnh proxy-image
 
 
-# ------------------------- store -------------------------
-
-
-def save_config():
+# ---------- Bảo vệ SSRF (chặn proxy fetch về IP nội bộ / LAN) ----------
+def _is_private_ip(ip):
     try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(CONFIG, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        log("[config] save fail: %s" % e)
-
-
-def load_config():
-    global CONFIG
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            CONFIG = json.load(f)
-    except Exception:
-        CONFIG = {}
-    CONFIG.setdefault("password", os.environ.get("ADMIN_PASSWORD", DEFAULT_PASSWORD))
-    b = CONFIG.setdefault("banner", {})
-    b.setdefault("image", DEFAULT_BANNER)
-    b.setdefault("link", "https://s.shopee.vn/")
-    save_config()
-
-
-def load_meta(slug):
-    p = os.path.join(META_DIR, slug + ".json")
-    try:
-        with open(p, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None
-
-
-def rebuild_index():
-    global INDEX, lastSync, _home_cache
-    idx = {}
-    if os.path.isdir(META_DIR):
-        for fn in os.listdir(META_DIR):
-            if fn.endswith(".json"):
-                slug = fn[:-5]
-                m = load_meta(slug)
-                if m:
-                    idx[slug] = m
-    INDEX = idx
-    lastSync = int(time.time() * 1000)
-    _home_cache = None
-
-
-def chapter_slugs():
-    global _chapSlugs_cache, _chapSlugs_cache_at
-    now = time.time()
-    if _chapSlugs_cache is not None and now - _chapSlugs_cache_at < 5:
-        return _chapSlugs_cache
-    s = set()
-    if os.path.isdir(CHAP_DIR):
-        for fn in os.listdir(CHAP_DIR):
-            if fn.endswith(".txt"):
-                s.add(fn.rsplit("_", 1)[0])
-    _chapSlugs_cache = s
-    _chapSlugs_cache_at = now
-    return s
-
-
-def ensure_dirs_and_assets():
-    for d in (DATA_DIR, META_DIR, CHAP_DIR, COVERS_DIR, BANNER_DIR):
-        os.makedirs(d, exist_ok=True)
-    bp = os.path.join(BANNER_DIR, "Banner_Shopee.png")
-    if not os.path.exists(bp):
-        make_png(bp, 900, 200, (74, 118, 168))
-
-
-def make_png(path, w, h, rgb):
-    def chunk(tag, data):
-        c = struct.pack(">I", len(data)) + tag + data
-        return c + struct.pack(">I", zlib.crc32(tag + data) & 0xffffffff)
-    r, g, b = rgb
-    row = b"".join(struct.pack("BBBB", r, g, b, 255) for _ in range(w))
-    raw = b"".join(b"\x00" + row for _ in range(h))
-    ihdr = struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)
-    png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) +
-           chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
-    with open(path, "wb") as f:
-        f.write(png)
-
-
-# ------------------------- payloads -------------------------
-
-SUMMARY_KEYS = ("slug", "title", "cover", "status", "rating", "views", "genres",
-                "chapterCount", "author")
-
-
-def summary(meta):
-    s = {k: meta.get(k) for k in SUMMARY_KEYS}
-    if s.get("chapterCount") is None:
-        s["chapterCount"] = len(meta.get("chapters") or [])
-    return s
-
-
-_home_cache = None
-_chap_cache = {}
-_chap_cache_order = []
-CHAP_CACHE_MAX = 4000
-
-
-def home_payload():
-    global _home_cache
-    if _home_cache is None:
-        items = list(INDEX.values())
-        popular = sorted(items, key=lambda m: m.get("views") or 0, reverse=True)[:12]
-        recent = sorted(items, key=lambda m: m.get("lastUpdated") or 0, reverse=True)[:12]
-        _home_cache = {
-            "popular": [summary(m) for m in popular],
-            "recentlyUpdated": [summary(m) for m in recent],
-        }
-    return _home_cache
-
-
-def novels_payload(qs):
-    q = (qs.get("q", [""])[0] or "").strip().lower()
-    genre = (qs.get("genre", [""])[0] or "").strip().lower()
-    status = (qs.get("status", [""])[0] or "").strip().lower()
-    sort = (qs.get("sort", [""])[0] or "rating").strip()
-    try:
-        page = max(1, int(qs.get("page", ["1"])[0] or 1))
+        a = ipaddress.ip_address(ip)
     except ValueError:
-        page = 1
+        return False
+    return (a.is_private or a.is_loopback or a.is_link_local
+            or a.is_multicast or a.is_reserved or a.is_unspecified)
+
+
+# Kiểm tra target URL: chặn nếu là IP literal private/loopback/link-local,
+# hoặc hostname mà khi resolve MỌI địa chỉ đều private (bail closed khi không resolve được).
+def _is_blocked_target(url):
     try:
-        limit = max(1, min(100, int(qs.get("limit", ["24"])[0] or 24)))
-    except ValueError:
-        limit = 24
-
-    items = [summary(m) for m in INDEX.values()]
-    if q:
-        items = [s for s in items if q in (s.get("title") or "").lower()
-                 or q in (s.get("author") or "").lower()]
-    if genre:
-        items = [s for s in items if any((g or "").lower() == genre for g in (s.get("genres") or []))]
-    if status:
-        items = [s for s in items if (s.get("status") or "") == status]
-    if sort == "rating":
-        items.sort(key=lambda s: (s.get("rating") is not None, s.get("rating") or 0), reverse=True)
-    elif sort == "popular":
-        items.sort(key=lambda s: s.get("views") or 0, reverse=True)
-    elif sort == "title":
-        items.sort(key=lambda s: (s.get("title") or "").lower())
-    else:
-        items.sort(key=lambda s: s.get("lastUpdated") or 0, reverse=True)
-
-    total = len(items)
-    total_pages = max(1, -(-total // limit))
-    start = (page - 1) * limit
-    return {
-        "items": items[start:start + limit],
-        "pagination": {"total": total, "totalPages": total_pages,
-                       "currentPage": page, "limit": limit},
-    }
+        host = (urlparse(url).hostname or '').strip('[]').lower()
+        if not host or host == 'localhost':
+            return True
+        try:
+            ipaddress.ip_address(host)
+            return _is_private_ip(host)
+        except ValueError:
+            pass
+        try:
+            infos = socket.getaddrinfo(host, None)
+        except socket.gaierror:
+            return True
+        addrs = {info[4][0] for info in infos}
+        if not addrs:
+            return True
+        return all(_is_private_ip(a) for a in addrs)
+    except Exception:
+        return True
 
 
-def novel_payload(slug):
-    m = INDEX.get(slug) or load_meta(slug)
-    if not m:
-        return None
-    d = dict(m)
-    d.setdefault("chapterCount", len(d.get("chapters") or []))
-    return d
+# ---------- Vệ sinh dữ liệu POST /api/store ----------
+# Loại bỏ ký tự < > khỏi mọi chuỗi — chặn kịch bản kẻ trong LAN gửi PHÂN ĐOẠN html
+# (title/chương/đoạn văn) để lưu XSS vào store dùng chung.
+def _sanitize_value(v):
+    if isinstance(v, str):
+        return v.replace('<', '').replace('>', '')
+    if isinstance(v, list):
+        return [_sanitize_value(x) for x in v]
+    if isinstance(v, dict):
+        return {str(k): _sanitize_value(x) for k, x in v.items()}
+    return v
 
 
-def genres_payload():
+def _sanitize_incoming(incoming):
+    if not isinstance(incoming, dict):
+        return {}
+    out = {}
+    for key in ('added', 'updated', 'removed', 'clicks'):
+        if key in incoming:
+            out[key] = _sanitize_value(incoming[key])
+    return out
+
+
+def load_data():
+    try:
+        with open(DATA_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        for k, v in DEFAULTS.items():
+            if k not in data:
+                data[k] = v
+        return data
+    except Exception:
+        return dict(DEFAULTS)
+
+
+def save_data(data):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(DATA_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False)
+
+
+def _ts(item):
+    if not isinstance(item, dict):
+        return 0
+    try:
+        t = item.get('ts')
+        return int(t) if t is not None else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+# Hợp nhất hai danh sách chương theo id — KHÔNG BAO GIỜ làm mất chương.
+# - Chương chỉ có ở base -> giữ.
+# - Chương chỉ có ở incoming -> thêm (chương vừa lưu không bị rơi).
+# - Chương trùng id -> giữ bản có updatedAt mới hơn (không cho snapshot cũ ghi đè).
+def _merge_chapters(base_list, incoming_list):
+    base_map = {}
+    for c in (base_list or []):
+        if isinstance(c, dict) and c.get('id') is not None:
+            base_map[str(c['id'])] = c
+    out = []
     seen = set()
-    folders = []
-    for m in INDEX.values():
-        for g in m.get("genres") or []:
-            key = (g or "").strip()
-            if key and key not in seen:
-                seen.add(key)
-                folders.append({"slug": key})
-    return {"folders": folders}
-
-
-def banner_payload():
-    b = CONFIG.get("banner") or {}
-    return {"image": b.get("image") or DEFAULT_BANNER, "link": b.get("link") or "#"}
-
-
-def chapter_payload(url):
-    m = re.match(r"^/chuong/([^/]+)/(\d+)$", url)
-    if not m:
-        return {"error": "url khong hop le"}
-    slug, num = m.group(1), int(m.group(2))
-    key = "%s_%d" % (slug, num)
-    cached = _chap_cache.get(key)
-    if cached is not None:
-        return cached
-    content = ""
-    p = os.path.join(CHAP_DIR, "%s_%d.txt" % (slug, num))
-    if os.path.exists(p):
-        try:
-            with open(p, "r", encoding="utf-8") as f:
-                content = f.read()
-        except Exception:
-            content = ""
-    title = "Chương %d" % num
-    meta = load_meta(slug)
-    if meta:
-        for c in meta.get("chapters") or []:
-            if c.get("number") == num:
-                title = c.get("name") or title
-                break
-    payload = {"content": content, "title": title, "slug": slug, "number": num}
-    if content:
-        _chap_cache[key] = payload
-        _chap_cache_order.append(key)
-        if len(_chap_cache_order) > CHAP_CACHE_MAX:
-            old = _chap_cache_order.pop(0)
-            _chap_cache.pop(old, None)
-    return payload
-
-
-def status_payload():
-    chap = chapter_slugs()
-    fetched = sum(1 for s in INDEX if s in chap)
-    return {"total": len(INDEX), "fetched": fetched, "lastSync": lastSync,
-            "syncRunning": syncRunning}
-
-
-def check_report_payload():
-    if LAST_REPORT is None:
-        return {"error": "Chua kiem tra cap nhat lan nao"}
-    return LAST_REPORT
-
-
-# ------------------------- jobs -------------------------
-
-
-def guarded_job(job):
-    def run(emit):
-        if not JOB_LOCK.acquire(blocking=False):
-            emit({"error": "Dang co job khac chay"})
-            return
-        global syncRunning
-        syncRunning = True
-        try:
-            job(emit)
-        except Exception as e:
-            log("[job] ERROR %s" % e)
-            emit({"error": str(e)})
-        finally:
-            syncRunning = False
-            JOB_LOCK.release()
-    return run
-
-
-def job_check(emit):
-    global LAST_REPORT
-    nw, up, un = [], [], 0
-    title_args = []
-    if os.path.isdir(META_DIR):
-        slugs = sorted(fn[:-5] for fn in os.listdir(META_DIR) if fn.endswith(".json"))
-    else:
-        slugs = []
-    total = len(slugs)
-    emit({"page": 0, "total": total, "new": 0, "updated": 0})
-    for i, slug in enumerate(slugs, 1):
-        m = load_meta(slug)
-        if not m:
+    for c in (base_list or []):
+        if isinstance(c, dict) and c.get('id') is None:
             continue
-        cc = len(m.get("chapters") or [])
-        cur = INDEX.get(slug)
-        if cur is None:
-            nw.append({"slug": slug, "title": m.get("title") or slug, "chapterCount": cc})
-        else:
-            diffs = []
-            oldcc = len(cur.get("chapters") or [])
-            if cc != oldcc:
-                diffs.append("%d -> %d chuong" % (oldcc, cc))
-            if (m.get("lastUpdated") or 0) != (cur.get("lastUpdated") or 0):
-                diffs.append("cap nhat du lieu")
-            if diffs:
-                up.append({"slug": slug, "title": m.get("title") or slug,
-                           "chapterCount": cc, "diffs": diffs})
+        out.append(c)
+        seen.add(str(c['id']))
+    for c in (incoming_list or []):
+        if not isinstance(c, dict):
+            continue
+        cid = str(c['id'] or id(c))
+        if cid in seen:
+            if cid in base_map:
+                b = base_map[cid]
+                bu = str(b.get('updatedAt') or '')
+                cu = str(c.get('updatedAt') or '')
+                if cu and (cu > bu or not bu):
+                    out = [c if str(x.get('id')) == cid else x for x in out]
+            continue
+        out.append(c)
+        seen.add(cid)
+    return out
+
+
+# Hợp nhất hai story (cùng id) theo nguyên tắc KHÔNG MẤT DỮ LIỆU:
+# - Bản incoming có ts MỚI HƠN hẳn (admin thao tác bằng code mới) => chính là trạng
+#   thái đầy đủ, dùng thẳng — tôn trọng cả việc XÓA chương.
+# - Bản incoming CŨ hơn / không có ts (legacy browser hoặc tab snapshot cũ) => chỉ gộp
+#   THÊM: chương mới được đưa vào, chương đang có giữ nguyên, không ghi đè field khác.
+def _merge_story(base_v, v):
+    if _ts(v) >= _ts(base_v):
+        return v
+    if not isinstance(base_v, dict):
+        return dict(v)
+    out = dict(base_v)
+    if isinstance(v.get('chapters'), list):
+        out['chapters'] = _merge_chapters(base_v.get('chapters', []) or [], v.get('chapters') or [])
+    return out
+
+
+# Hợp nhất dữ liệu từ client (incoming) vào dữ liệu đang lưu (base).
+# Lý do: mỗi tab/browser giữ một bản snapshot cũ của toàn bộ store; nếu ghi đè
+# trực tiếp thì một thao tác nhỏ của tab cũ (click/đóng tab) sẽ XÓA truyện mới
+# vừa được thêm từ thiết bị khác. Merge theo id/key để không bao giờ làm mất dữ liệu.
+def merge_data(base, incoming):
+    out = {}
+    for k, v in base.items():
+        out[k] = v
+
+    # added: chống mất truyện mới — giữ cả truyện đang có lẫn truyện incoming;
+    # khi trùng id thì hợp nhất theo chương (bản ts mới hơn thắng field).
+    added_map = {}
+    for s in out.get('added', []) or []:
+        if isinstance(s, dict) and s.get('id') is not None:
+            key = str(s['id'])
+            added_map[key] = s if key not in added_map else _merge_story(added_map[key], s)
+    for s in incoming.get('added', []) or []:
+        if isinstance(s, dict) and s.get('id') is not None:
+            key = str(s['id'])
+            added_map[key] = _merge_story(added_map.get(key, dict(s)), s) if key in added_map else s
+        elif isinstance(s, dict):
+            added_map[id(s)] = s
+    out['added'] = list(added_map.values())
+
+    # updated: hợp nhất theo từng story — bản có ts MỚI HƠN ghi đè field tương ứng;
+    # giữ field không có ở incoming, không xóa story patch của thiết bị khác.
+    upd = dict(out.get('updated', {}) or {})
+    for k, v in (incoming.get('updated', {}) or {}).items():
+        base_v = upd.get(k)
+        if isinstance(base_v, dict) and isinstance(v, dict):
+            if _ts(v) >= _ts(base_v):
+                upd[k] = {**base_v, **v}
             else:
-                un += 1
-        if i % 5 == 0 or i == total:
-            emit({"page": i, "total": total, "new": len(nw), "updated": len(up)})
-    LAST_REPORT = {"checkedAt": int(time.time() * 1000), "new": nw,
-                   "updated": up, "unchanged": un}
-    emit({"page": total, "total": total, "new": len(nw), "updated": len(up)})
-    emit({"complete": True})
+                upd[k] = base_v
+                if isinstance(v.get('chapters'), list):
+                    merged_b = dict(base_v)
+                    merged_b['chapters'] = _merge_chapters(base_v.get('chapters', []), v.get('chapters') or [])
+                    upd[k] = merged_b
+        else:
+            upd[k] = _merge_story(base_v, v)
+    out['updated'] = upd
+
+    # removed: hợp nhất danh sách id (không lặp, không mất).
+    removed = list(out.get('removed', []) or [])
+    for r in (incoming.get('removed', []) or []):
+        if r not in removed:
+            removed.append(r)
+    out['removed'] = removed
+
+    # clicks: lấy max — số click không bao giờ thụt lùi dù tab cũ gửi bản ít hơn.
+    clicks = dict(out.get('clicks', {}) or {})
+    for k, v in (incoming.get('clicks', {}) or {}).items():
+        clicks[k] = max(int(clicks.get(k, 0) or 0), int(v or 0))
+    out['clicks'] = clicks
+
+    return out
 
 
-def job_fetch_all(emit):
-    import scraper
-    opts = {"data_dir": DATA_DIR, "covers_dir": COVERS_DIR, "fresh": False}
-    scraper.job_fetch_all(opts, emit=emit)
-    rebuild_index()
+class Handler(SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=ROOT, **kwargs)
 
+    def end_headers(self):
+        self.send_header('Cache-Control', 'no-store')
+        super().end_headers()
 
-def job_fetch_specified(emit, slugs):
-    import scraper
-    opts = {"data_dir": DATA_DIR, "covers_dir": COVERS_DIR, "fresh": False}
-    scraper.job_fetch_specified(slugs, opts, emit=emit)
-    rebuild_index()
-
-
-def job_fetch_covers(emit):
-    import scraper
-    opts = {"data_dir": DATA_DIR, "covers_dir": COVERS_DIR}
-    scraper.job_fetch_covers(opts, emit=emit)
-
-
-def do_sync():
-    try:
-        rebuild_index()
-        return {"ok": True}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-# ------------------------- http -------------------------
-
-
-def log(msg):
-    s = str(msg)
-    try:
-        print(s, flush=True)
-    except UnicodeEncodeError:
-        print(s.encode("ascii", "ignore").decode("ascii"), flush=True)
-
-
-class Handler(BaseHTTPRequestHandler):
-    server_version = "TEHI/1.0"
-    protocol_version = "HTTP/1.1"
-
-    # ---- helpers ----
-
-    def _cors(self):
-        origin = os.environ.get("ALLOW_ORIGIN", "").strip()
-        if not origin:
-            origin = "*"
-        self.send_header("Access-Control-Allow-Origin", origin)
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, x-admin-token")
-
-    def _json(self, obj, status=200):
-        data = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+    def _send_json(self, obj, status=200):
+        body = json.dumps(obj, ensure_ascii=False).encode('utf-8')
         self.send_response(status)
-        self._cors()
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "DENY")
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
         self.end_headers()
+        self.wfile.write(body)
+
+    def _is_allowed_host(self, url):
         try:
-            self.wfile.write(data)
+            host = (urlparse(url).hostname or '').lower().replace('www.', '')
+            return any(host == h or host.endswith('.' + h) for h in ALLOWED_CRAWL_HOSTS)
         except Exception:
-            pass
+            return False
 
-    def _file(self, fpath, ctype):
-        try:
-            with open(fpath, "rb") as f:
-                data = f.read()
-        except OSError:
-            self.send_error(404)
-            return
-        self.send_response(200)
-        self._cors()
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "DENY")
-        self.end_headers()
-        try:
-            self.wfile.write(data)
-        except Exception:
-            pass
-
-    def _auth(self):
-        tok = self.headers.get("x-admin-token") or ""
-        if not tok:
-            qs = parse_qs(urlparse(self.path).query)
-            tok = (qs.get("token", [""])[0] or "")
-        return bool(tok) and tokens.get(tok, 0) > time.time()
-
-    def _sse(self, job):
-        q = queue.Queue()
-
-        def runner():
-            try:
-                job(q.put)
-            except Exception as e:
-                q.put({"error": str(e)})
-            finally:
-                q.put(None)
-
-        threading.Thread(target=runner, daemon=True).start()
-        self.send_response(200)
-        self._cors()
-        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "close")
-        self.end_headers()
-        self.end_headers()
-        while True:
-            try:
-                ev = q.get(timeout=15)
-            except queue.Empty:
-                try:
-                    self.wfile.write(b": ping\n\n")
-                    self.wfile.flush()
-                except Exception:
-                    break
-                continue
-            if ev is None:
-                break
-            try:
-                self.wfile.write(("data: " + json.dumps(ev, ensure_ascii=False) +
-                                  "\n\n").encode("utf-8"))
-                self.wfile.flush()
-            except Exception:
-                break
-
-    # ---- serving ----
+    def _proxy_fetch(self, url, timeout=12, as_json=True):
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0',
+            'Accept': '*/*',
+            'Referer': 'https://truyen2k.com/',
+        })
+        limit = MAX_HTML_BYTES if as_json else MAX_IMAGE_BYTES
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            ct = (resp.headers.get('Content-Type') or '').lower()
+            raw = resp.read(limit + 1)
+            if len(raw) > limit:
+                self._send_json({'ok': False, 'error': 'Nội dung quá lớn'}, 413)
+                return
+            if as_json:
+                text = raw.decode('utf-8', errors='ignore')
+                self._send_json({'ok': True, 'html': text, 'url': url})
+            else:
+                import base64
+                mime = 'image/jpeg'
+                if 'png' in ct: mime = 'image/png'
+                elif 'webp' in ct: mime = 'image/webp'
+                b64 = base64.b64encode(raw).decode('ascii')
+                self._send_json({'ok': True, 'dataUrl': f'data:{mime};base64,{b64}', 'url': url})
 
     def do_GET(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
-        if path.startswith("/api/"):
-            self.api_get(path, parsed)
+        path = self.path.split('?')[0]
+        if path == '/api/store':
+            self._send_json(load_data())
             return
-        self.serve_static(path)
-
-    def do_OPTIONS(self):
-        self.send_response(204)
-        self._cors()
-        self.send_header("Content-Length", "0")
-        self.end_headers()
+        if path == '/api/crawl':
+            try:
+                qs = parse_qs(urlparse(self.path).query)
+                target = (qs.get('url', [''])[0]).strip()
+                if not target or not target.startswith(('http://', 'https://')):
+                    self._send_json({'ok': False, 'error': 'Thiếu URL hợp lệ'}, 400); return
+                if not self._is_allowed_host(target):
+                    self._send_json({'ok': False, 'error': 'Nguồn không được hỗ trợ'}, 403); return
+                if _is_blocked_target(target):
+                    self._send_json({'ok': False, 'error': 'Địa chỉ không được phép'}, 403); return
+                self._proxy_fetch(target, timeout=12, as_json=True)
+            except Exception as e:
+                self._send_json({'ok': False, 'error': str(e)[:200]}, 502)
+            return
+        if path == '/api/proxy-image':
+            try:
+                qs = parse_qs(urlparse(self.path).query)
+                target = (qs.get('url', [''])[0]).strip()
+                if not target or not target.startswith(('http://', 'https://')):
+                    self._send_json({'ok': False, 'error': 'Thiếu URL ảnh hợp lệ'}, 400); return
+                if _is_blocked_target(target):
+                    self._send_json({'ok': False, 'error': 'Địa chỉ không được phép'}, 403); return
+                self._proxy_fetch(target, timeout=15, as_json=False)
+            except Exception as e:
+                self._send_json({'ok': False, 'error': str(e)[:200]}, 502)
+            return
+        super().do_GET()
 
     def do_POST(self):
-        length = int(self.headers.get("Content-Length") or 0)
-        body = self.rfile.read(length) if length else b""
-        self.api_post(urlparse(self.path).path, body)
-
-    def serve_static(self, path):
-        if path in ("/", "/index.html"):
-            self._file(os.path.join(ROOT, "index.html"), MIME[".html"])
+        if self.path.split('?')[0] == '/api/store':
+            try:
+                length = int(self.headers.get('Content-Length', 0) or 0)
+                if length <= 0 or length > MAX_STORE_BYTES:
+                    self._send_json({'ok': False, 'error': 'payload quá lớn'}, 413)
+                    return
+                raw = self.rfile.read(length).decode('utf-8')
+                incoming = _sanitize_incoming(json.loads(raw))
+                save_data(merge_data(load_data(), incoming))
+            except Exception:
+                self.send_error(400, 'bad json')
+                return
+            self._send_json({'ok': True})
             return
-        rel = unquote(path.lstrip("/"))
-        fpath = os.path.normpath(os.path.join(ROOT, rel))
-        if os.path.commonpath([ROOT, fpath]) != ROOT:
-            self.send_error(403)
-            return
-        if os.path.isfile(fpath):
-            ext = os.path.splitext(fpath)[1].lower()
-            self._file(fpath, MIME.get(ext, "application/octet-stream"))
-            return
-        # SPA fallback
-        self._file(os.path.join(ROOT, "index.html"), MIME[".html"])
+        self.send_error(404)
 
-    def api_get(self, path, parsed):
-        qs = parse_qs(parsed.query)
-        if path == "/api/banner":
-            return self._json(banner_payload())
-        if path == "/api/home":
-            return self._json(home_payload())
-        if path == "/api/novels":
-            return self._json(novels_payload(qs))
-        if path == "/api/genres":
-            return self._json(genres_payload())
-        m = re.match(r"^/api/novel/([^/]+)$", path)
-        if m:
-            d = novel_payload(unquote(m.group(1)))
-            if d is None:
-                return self._json({"error": "not found"}, 404)
-            return self._json(d)
-        if path == "/api/local/chapter":
-            return self._json(chapter_payload(qs.get("url", [""])[0]))
-
-        if path in ("/api/local/status", "/api/local/check-report"):
-            if not self._auth():
-                return self._json({"error": "unauthorized"}, 401)
-            if path == "/api/local/status":
-                return self._json(status_payload())
-            return self._json(check_report_payload())
-        if path in ("/api/local/sync-check", "/api/local/fetch-all", "/api/local/fetch-covers"):
-            if not self._auth():
-                return self._json({"error": "unauthorized", "retry": True}, 401)
-            job = {"sync-check": job_check,
-                   "fetch-all": job_fetch_all,
-                   "fetch-covers": job_fetch_covers}[path]
-            return self._sse(guarded_job(job))
-        if path == "/api/admin/config":
-            if not self._auth():
-                return self._json({"error": "unauthorized"}, 401)
-            return self._json({"banner": CONFIG.get("banner")})
-        self._json({"error": "not found"}, 404)
-
-    def api_post(self, path, body):
-        if path == "/api/admin/login":
-            try:
-                payload = json.loads(body or b"{}")
-            except Exception:
-                return self._json({"error": "bad json"}, 400)
-            pw = payload.get("password")
-            if pw and pw == CONFIG.get("password"):
-                import uuid
-                tok = uuid.uuid4().hex
-                tokens[tok] = time.time() + 86400
-                return self._json({"token": tok})
-            return self._json({"error": "sai mat khau"}, 401)
-
-        if not self._auth():
-            return self._json({"error": "unauthorized"}, 401)
-
-        if path == "/api/admin/config":
-            try:
-                payload = json.loads(body or b"{}")
-            except Exception:
-                return self._json({"error": "bad json"}, 400)
-            b = payload.get("banner") or {}
-            cfg_b = CONFIG.setdefault("banner", {})
-            if "image" in b:
-                cfg_b["image"] = str(b["image"] or DEFAULT_BANNER)
-            if "link" in b:
-                cfg_b["link"] = str(b.get("link") or "#")
-            if "password" in payload and isinstance(payload["password"], str) and payload["password"]:
-                CONFIG["password"] = payload["password"]
-            save_config()
-            return self._json({"banner": cfg_b})
-
-        if path == "/api/local/sync":
-            return self._json(do_sync())
-
-        if path == "/api/local/fetch-specified":
-            try:
-                payload = json.loads(body or b"{}")
-                slugs = [s for s in (payload.get("slugs") or []) if isinstance(s, str) and s]
-            except Exception:
-                return self._json({"error": "bad json"}, 400)
-            return self._sse(guarded_job(lambda emit: job_fetch_specified(emit, slugs)))
-
-        if path == "/api/local/import":
-            return self.api_import(body)
-
-        self._json({"error": "not found"}, 404)
-
-    def api_import(self, body):
-        try:
-            payload = json.loads(body or b"{}")
-        except Exception:
-            return self._json({"error": "bad json"}, 400)
-        novel = payload.get("novel") or {}
-        slug = re.sub(r"[^A-Za-z0-9_\-.]", "-", str(novel.get("slug") or "")).strip(".")
-        if not slug or "/" in slug:
-            return self._json({"error": "no slug"}, 400)
-        os.makedirs(META_DIR, exist_ok=True)
-        os.makedirs(CHAP_DIR, exist_ok=True)
-        meta = dict(novel)
-        chlist = []
-        for c in payload.get("chapters") or []:
-            try:
-                num = int(c.get("number") or 0)
-            except (TypeError, ValueError):
-                num = 0
-            if num <= 0:
-                continue
-            name = str(c.get("name") or ("Chương %d" % num))
-            content = str(c.get("content") or "")
-            chlist.append({"number": num, "name": name, "url": "/chuong/%s/%d" % (slug, num)})
-            if content:
-                with open(os.path.join(CHAP_DIR, "%s_%d.txt" % (slug, num)),
-                          "w", encoding="utf-8") as f:
-                    f.write(content)
-        meta["slug"] = slug
-        meta["chapters"] = chlist
-        meta["chapterCount"] = len(chlist)
-        meta["lastUpdated"] = int(time.time() * 1000)
-        meta["fetched"] = bool(chlist)
-        cb = payload.get("coverBase64")
-        if cb:
-            ext = re.sub(r"[^a-z]", "", str(payload.get("coverExt") or "jpg").lower()) or "jpg"
-            if ext not in ("jpg", "jpeg", "png", "webp", "gif"):
-                ext = "jpg"
-            try:
-                data = base64.b64decode(cb)
-                os.makedirs(COVERS_DIR, exist_ok=True)
-                with open(os.path.join(COVERS_DIR, "%s.%s" % (slug, ext)), "wb") as f:
-                    f.write(data)
-                if ext == "jpeg":
-                    ext = "jpg"
-                meta["cover"] = "/covers/%s.%s" % (slug, ext)
-            except Exception:
-                pass
-        with open(os.path.join(META_DIR, slug + ".json"), "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
-        rebuild_index()
-        return self._json({"ok": True, "slug": slug})
+    def log_message(self, fmt, *args):
+        pass
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Do Truyen local server")
-    ap.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
-    ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
-    args = ap.parse_args()
-
-    ensure_dirs_and_assets()
-    load_config()
-    rebuild_index()
-    # clear leftover tokens from disk-less restarts
-    save_config()
-
-    srv = ThreadingHTTPServer((args.host, args.port), Handler)
-    srv.daemon_threads = True
-    host = args.host if args.host not in ("0.0.0.0", "") else "localhost"
-    log("=" * 52)
-    log("Do Truyen local server  ->  http://%s:%d/" % (host, args.port))
-    log("Mat khau admin          :  %s" % CONFIG.get("password"))
-    log("Du lieu                 :  %s" % DATA_DIR)
-    log("Bia (covers)            :  %s" % COVERS_DIR)
-    log("Bam Ctrl+C de dung.")
-    log("=" * 52)
-    try:
-        srv.serve_forever()
-    except KeyboardInterrupt:
-        log("\nStopped.")
+    os.chdir(ROOT)
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8123
+    with ThreadingHTTPServer(('0.0.0.0', port), Handler) as httpd:
+        print('Serving', ROOT, 'on http://0.0.0.0:' + str(port), 'data=', DATA_FILE, flush=True)
+        httpd.serve_forever()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
